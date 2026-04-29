@@ -357,19 +357,15 @@ async function handleTextMessage(ctx) {
 async function showMainMenu(ctx, userId) {
   const conversation = await getConversation(userId);
   const preset = getCharacterPreset(conversation.characterKey, config);
-  await ctx.reply(buildMainMenuText(preset), {
-    ...buildMainMenuKeyboard(),
-    ...buildPersistentMenuKeyboard()
-  });
+  await ctx.reply(buildMainMenuText(preset), buildMainMenuKeyboard());
+  await ctx.reply("Нижние кнопки тоже активны.", buildPersistentMenuKeyboard());
 }
 
 async function showGamesMenu(ctx, userId) {
   const conversation = await getConversation(userId);
   const preset = getCharacterPreset(conversation.characterKey, config);
-  await ctx.reply(buildGamesMenuText(preset), {
-    ...buildGamesKeyboard(preset),
-    ...buildPersistentMenuKeyboard()
-  });
+  await ctx.reply(buildGamesMenuText(preset), buildGamesKeyboard(preset));
+  await ctx.reply("Выбирай игру кнопками или через нижнее меню.", buildPersistentMenuKeyboard());
 }
 
 bot.start(async (ctx) => {
@@ -383,10 +379,7 @@ bot.start(async (ctx) => {
   ].join(" ");
 
   await ctx.reply(intro, buildPersistentMenuKeyboard());
-  await ctx.reply(buildCharacterMenuText(), {
-    ...buildCharacterKeyboard(),
-    ...buildPersistentMenuKeyboard()
-  });
+  await ctx.reply(buildCharacterMenuText(), buildCharacterKeyboard());
 });
 
 bot.command("menu", async (ctx) => {
@@ -394,10 +387,8 @@ bot.command("menu", async (ctx) => {
 });
 
 bot.command("characters", async (ctx) => {
-  await ctx.reply(buildCharacterMenuText(), {
-    ...buildCharacterKeyboard(),
-    ...buildPersistentMenuKeyboard()
-  });
+  await ctx.reply(buildCharacterMenuText(), buildCharacterKeyboard());
+  await ctx.reply("Нижнее меню тоже доступно.", buildPersistentMenuKeyboard());
 });
 
 bot.command("character", async (ctx) => {
@@ -405,10 +396,8 @@ bot.command("character", async (ctx) => {
   const input = ctx.message?.text?.split(/\s+/)[1]?.toLowerCase();
 
   if (!input || !CHARACTER_PRESETS[input]) {
-    await ctx.reply(buildCharacterMenuText(), {
-      ...buildCharacterKeyboard(),
-      ...buildPersistentMenuKeyboard()
-    });
+    await ctx.reply(buildCharacterMenuText(), buildCharacterKeyboard());
+    await ctx.reply("Нижнее меню тоже доступно.", buildPersistentMenuKeyboard());
     return;
   }
 
@@ -460,10 +449,8 @@ bot.hears("Меню", async (ctx) => {
 });
 
 bot.hears("Сменить персонажа", async (ctx) => {
-  await ctx.reply(buildCharacterMenuText(), {
-    ...buildCharacterKeyboard(),
-    ...buildPersistentMenuKeyboard()
-  });
+  await ctx.reply(buildCharacterMenuText(), buildCharacterKeyboard());
+  await ctx.reply("Нижнее меню тоже доступно.", buildPersistentMenuKeyboard());
 });
 
 bot.hears("Игры", async (ctx) => {
@@ -484,10 +471,8 @@ bot.action(/^menu:(characters|games|whoami)$/, async (ctx) => {
   await ctx.answerCbQuery();
 
   if (action === "characters") {
-    await ctx.reply(buildCharacterMenuText(), {
-      ...buildCharacterKeyboard(),
-      ...buildPersistentMenuKeyboard()
-    });
+    await ctx.reply(buildCharacterMenuText(), buildCharacterKeyboard());
+    await ctx.reply("Нижнее меню тоже доступно.", buildPersistentMenuKeyboard());
     return;
   }
 
