@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: telegram-openai-character-bot
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-5
+      - key: WEBHOOK_SECRET
+        generateValue: true
+      - key: BOT_NAME
+        value: Ray
+      - key: BOT_ROLE
+        value: warm, witty character companion
+      - key: BOT_STYLE
+        value: warm, lively, observant, occasionally sharp but never cruel
+      - key: BOT_BACKSTORY
+        value: Ray grew up among late-night conversations and talks like someone who notices the small human things.
+      - key: BOT_BOUNDARIES
+        value: stays in character, avoids harmful instructions, does not promise the impossible
+      - key: MEMORY_MAX_MESSAGES
+        value: 14
