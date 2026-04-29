@@ -2,7 +2,13 @@ import "dotenv/config";
 import http from "http";
 import OpenAI from "openai";
 import { Markup, Telegraf } from "telegraf";
-import { buildCharacterInstructions, CHARACTER_PRESETS, getCharacterPreset } from "./character.js";
+import {
+  buildCharacterInstructions,
+  buildModeInstructions,
+  CHARACTER_PRESETS,
+  getCharacterPreset,
+  MODE_PRESETS
+} from "./character.js";
 import { buildMoodGuidance, detectMood } from "./mood.js";
 import { clipMessages, getConversation, saveConversation } from "./memory-store.js";
 
@@ -37,7 +43,8 @@ function buildCharacterMenuText() {
     "Выбери персонажа кнопкой ниже или командой:",
     "/character ray - Рэй, ироничный и теплый",
     "/character luna - Кай, дерзкий и черноюморный",
-    "/character vega - Вега, собранный и остроумный"
+    "/character vega - Вега, собранный и остроумный",
+    "/character mira - Мира, ехидная и стильная"
   ].join("\n");
 }
 
@@ -46,7 +53,8 @@ function buildCharacterKeyboard() {
     [
       Markup.button.callback("Рэй", "character:ray"),
       Markup.button.callback("Кай", "character:luna"),
-      Markup.button.callback("Вега", "character:vega")
+      Markup.button.callback("Вега", "character:vega"),
+      Markup.button.callback("Мира", "character:mira")
     ]
   ]);
 }
@@ -61,10 +69,64 @@ async function setCharacterForUser(userId, characterKey) {
   await saveConversation(userId, {
     summary: "",
     messages: [],
-    characterKey: preset.key
+    characterKey: preset.key,
+    mode: "normal",
+    game: null
   });
 
   return preset;
+}
+
+function buildModeMenuText() {
+  return [
+    "Выбери режим:",
+    "/mode normal - обычный",
+    "/mode roast - жестче и ядовитее",
+    "/mode soft - мягче и человечнее"
+  ].join("\n");
+}
+
+function buildModeKeyboard() {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback("Normal", "mode:normal"),
+      Markup.button.callback("Roast", "mode:roast"),
+      Markup.button.callback("Soft", "mode:soft")
+    ]
+  ]);
+}
+
+function buildGameMenuText() {
+  return [
+    "Игры и режимы:",
+    "/game guess - угадай персонажа по реплике",
+    "/game duel - словесная дуэль с персонажем",
+    "/game off - выйти из игры"
+  ].join("\n");
+}
+
+function getGameOpening(gameKey, preset) {
+  if (gameKey === "guess") {
+    const lines = [
+      "Ладно, играем. Я сейчас кину реплику, а ты угадаешь, кто это мог бы сказать.",
+      "Реплика: \"Я не токсичный, я просто у судьбы работаю отделом насмешек.\"",
+      "Пиши свой вариант."
+    ];
+    return lines.join(" ");
+  }
+
+  if (gameKey === "duel") {
+    return `${preset.label} выходит на словесную дуэль. Кидай фразу, а я отвечу острее.`;
+  }
+
+  return "Игра не найдена.";
+}
+
+async function updateConversation(userId, updater) {
+  const current = await getConversation(userId);
+  const next = updater(current);
+  await saveConversation(userId, next);
+  return next;
 }
 
 function formatHistory(messages, botName) {
@@ -82,12 +144,16 @@ async function generateReply({ messageText, userProfile, conversation }) {
   const moodGuidance = buildMoodGuidance(mood);
   const preset = getCharacterPreset(conversation.characterKey, config);
   const characterInstructions = buildCharacterInstructions(config, preset);
+  const modeInstructions = buildModeInstructions(conversation.mode);
   const historyText = formatHistory(conversation.messages, preset.label);
   const summary = conversation.summary || "Краткой сводки пока нет.";
+  const gameContext = conversation.game
+    ? `Активная игра: ${conversation.game}. Если игра требует формата, придерживайся его.`
+    : "Активной игры нет.";
 
   const response = await openai.responses.create({
     model: config.openaiModel,
-    instructions: characterInstructions,
+    instructions: [characterInstructions, modeInstructions].join("\n"),
     input: [
       {
         role: "user",
@@ -99,6 +165,7 @@ async function generateReply({ messageText, userProfile, conversation }) {
               moodGuidance,
               `Профиль пользователя: ${userProfile}.`,
               `Краткая память о прошлых диалогах: ${summary}`,
+              gameContext,
               "Недавний контекст диалога:",
               historyText,
               "Новое сообщение пользователя:",
@@ -165,7 +232,9 @@ async function handleTextMessage(ctx) {
   await saveConversation(userId, {
     summary: updatedSummary,
     messages: updatedMessages,
-    characterKey: conversation.characterKey || "ray"
+    characterKey: conversation.characterKey || "ray",
+    mode: conversation.mode || "normal",
+    game: conversation.game || null
   });
 
   await ctx.reply(reply);
@@ -203,13 +272,79 @@ bot.command("character", async (ctx) => {
   await ctx.reply(`Теперь с тобой ${preset.label}. Можешь писать.`);
 });
 
-bot.action(/^character:(ray|luna|vega)$/, async (ctx) => {
+bot.command("modes", async (ctx) => {
+  await ctx.reply(buildModeMenuText(), buildModeKeyboard());
+});
+
+bot.command("mode", async (ctx) => {
+  const userId = String(ctx.from?.id);
+  const input = ctx.message?.text?.split(/\s+/)[1]?.toLowerCase();
+
+  if (!input || !MODE_PRESETS[input]) {
+    await ctx.reply(buildModeMenuText(), buildModeKeyboard());
+    return;
+  }
+
+  await updateConversation(userId, (current) => ({
+    ...current,
+    mode: input
+  }));
+
+  await ctx.reply(`Режим переключен: ${MODE_PRESETS[input].label}.`);
+});
+
+bot.command("games", async (ctx) => {
+  await ctx.reply(buildGameMenuText());
+});
+
+bot.command("game", async (ctx) => {
+  const userId = String(ctx.from?.id);
+  const input = ctx.message?.text?.split(/\s+/)[1]?.toLowerCase();
+  const current = await getConversation(userId);
+  const preset = getCharacterPreset(current.characterKey, config);
+
+  if (!input || !["guess", "duel", "off"].includes(input)) {
+    await ctx.reply(buildGameMenuText());
+    return;
+  }
+
+  if (input === "off") {
+    await updateConversation(userId, (conversation) => ({
+      ...conversation,
+      game: null
+    }));
+    await ctx.reply("Игру выключил. Возвращаемся к обычному общению.");
+    return;
+  }
+
+  await updateConversation(userId, (conversation) => ({
+    ...conversation,
+    game: input
+  }));
+
+  await ctx.reply(getGameOpening(input, preset));
+});
+
+bot.action(/^character:(ray|luna|vega|mira)$/, async (ctx) => {
   const userId = String(ctx.from?.id);
   const characterKey = ctx.match[1];
   const preset = await setCharacterForUser(userId, characterKey);
 
   await ctx.answerCbQuery(`Выбрано: ${preset.label}`);
   await ctx.reply(`Теперь с тобой ${preset.label}. Можешь писать.`);
+});
+
+bot.action(/^mode:(normal|roast|soft)$/, async (ctx) => {
+  const userId = String(ctx.from?.id);
+  const modeKey = ctx.match[1];
+
+  await updateConversation(userId, (current) => ({
+    ...current,
+    mode: modeKey
+  }));
+
+  await ctx.answerCbQuery(`Режим: ${modeKey}`);
+  await ctx.reply(`Режим переключен: ${modeKey}.`);
 });
 
 bot.on("text", async (ctx) => {
